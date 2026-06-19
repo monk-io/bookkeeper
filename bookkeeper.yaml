@@ -1,0 +1,89 @@
+namespace: bookkeeper
+
+base:
+  defines: runnable
+  metadata:
+    name: Apache BookKeeper
+    description: |
+      Reusable Apache BookKeeper bookie component. It provides the BookKeeper storage service itself and expects an external metadata coordination service to be connected as `metadata-store`; compatible Monk packages include the self-hosted `zookeeper/monk-zookeeper` package or any inherited ZooKeeper-compatible service exposing a client TCP endpoint.
+    tags: apache, bookkeeper, storage, log-service, metadata, component
+    website: https://bookkeeper.apache.org/
+    source: https://github.com/apache/bookkeeper
+    publisher: monk.io
+    private: false
+  variables:
+    bookkeeper-image-tag:
+      type: string
+      value: 4.15.3
+      description: Public apache/bookkeeper Docker image tag to run.
+    bookie-port:
+      type: int
+      env: BK_bookiePort
+      value: 3181
+      description: BookKeeper bookie TCP port inside the container and Monk network.
+    http-port:
+      type: int
+      env: BK_httpServerPort
+      value: 8080
+      description: BookKeeper HTTP admin port inside the container.
+    http-server-enabled:
+      type: string
+      env: BK_httpServerEnabled
+      value: "true"
+      description: Enables the BookKeeper HTTP admin server for health and operational checks.
+    listening-interface:
+      type: string
+      env: BK_listeningInterface
+      value: eth0
+      description: Container network interface BookKeeper advertises for the bookie service; inherited templates may override this for custom runtime networks.
+    zk-servers:
+      type: string
+      env: BK_zkServers
+      value: ""
+      description: ZooKeeper host:port list. Inheriting templates must set this from their metadata-store connection.
+    metadata-service-uri:
+      type: string
+      env: BK_metadataServiceUri
+      value: ""
+      description: BookKeeper metadata service URI. Inheriting templates must set this from their metadata-store connection, for example a ZooKeeper URI such as zk+hierarchical://host:2181/ledgers.
+    zk-ledgers-root-path:
+      type: string
+      env: BK_zkLedgersRootPath
+      value: /ledgers
+      description: ZooKeeper ledger metadata root path used by the upstream BookKeeper Docker initialization scripts. Inheriting templates may set a deployment-specific path to isolate metadata.
+    data-dir:
+      type: string
+      env: BK_DATA_DIR
+      value: /data/bookkeeper
+      description: Root directory for BookKeeper journal, ledger, and index data inside the container.
+    storage-volume-name:
+      type: string
+      value: bookkeeper
+      description: Name of the Monk volume subdirectory used for persistent BookKeeper data.
+  containers:
+    bookie:
+      image: apache/bookkeeper
+      image-tag: <- $bookkeeper-image-tag
+      paths:
+        - <- `${volume-path}/${storage-volume-name}:/data/bookkeeper`
+      restart: unless-stopped
+      bash: |
+        export BK_advertisedAddress="$(hostname -I | awk '{print $1}')"
+        exec /bin/bash /opt/bookkeeper/scripts/entrypoint.sh bookie
+  services:
+    bookie:
+      container: bookie
+      port: <- $bookie-port
+      protocol: tcp
+      description: Private BookKeeper bookie protocol endpoint for connected Monk workloads.
+    http:
+      container: bookie
+      port: <- $http-port
+      protocol: tcp
+      description: BookKeeper HTTP admin endpoint for health and operational checks.
+  checks:
+    readiness:
+      code: exec("bookie", "/bin/sh", "-c", "curl -fsS http://127.0.0.1:${BK_httpServerPort}/heartbeat") contains?("OK")
+      period: 10
+      initialDelay: 20
+      attempts: 30

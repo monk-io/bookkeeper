@@ -1,0 +1,201 @@
+namespace: bookkeeper
+
+stack-zookeeper:
+  defines: runnable
+  inherits: zookeeper/monk-zookeeper
+  metadata:
+    name: Apache BookKeeper Stack ZooKeeper
+    description: |
+      ZooKeeper metadata store for the standalone BookKeeper stack. It inherits the catalog `zookeeper/monk-zookeeper` package and remains private to Monk workloads.
+    tags: apache, bookkeeper, zookeeper, metadata, standalone, production
+    website: https://zookeeper.apache.org/
+    source: https://github.com/apache/zookeeper
+    publisher: monk.io
+    private: false
+  variables:
+    image:
+      type: string
+      value: 3.9.5
+      description: Public zookeeper Docker image tag to run for the standalone metadata store.
+    admin_server:
+      type: bool
+      value: true
+      env: ZOO_ADMINSERVER_ENABLED
+      description: Enables ZooKeeper's admin server inside the private standalone workload.
+  services:
+    client:
+      container: db
+      port: 2181
+      protocol: tcp
+      description: Private ZooKeeper client endpoint consumed by the standalone BookKeeper bookie.
+
+stack-bookie:
+  defines: runnable
+  inherits: bookkeeper/base
+  metadata:
+    name: Apache BookKeeper Standalone Bookie
+    description: |
+      Production-oriented standalone BookKeeper bookie with persistent storage and no public host-port exposure. The BookKeeper admin HTTP service is intentionally private because the upstream image does not provide built-in HTTP authentication; expose it only through an authenticated application or inherited secure wrapper.
+    tags: apache, bookkeeper, storage, log-service, standalone, production
+    website: https://bookkeeper.apache.org/
+    source: https://github.com/apache/bookkeeper
+    publisher: monk.io
+    private: false
+  variables:
+    storage-volume-name:
+      type: string
+      value: bookkeeper-stack
+      description: Name of the Monk volume subdirectory used for persistent data in the standalone stack.
+    zk-ledgers-root-path:
+      type: string
+      env: BK_zkLedgersRootPath
+      value: /bookkeeper-stack-ledgers
+      description: ZooKeeper ledger metadata root path for the production-oriented standalone stack.
+    zk-servers:
+      type: string
+      env: BK_zkServers
+      value: <- connection("metadata-store")
+      description: ZooKeeper host:port list read from the Monk metadata-store connection.
+    metadata-service-uri:
+      type: string
+      env: BK_metadataServiceUri
+      value: <- connection-hostname("metadata-store") set-tmp("zk-host") connection-port("metadata-store") set-tmp("zk-port") `zk+hierarchical://${zk-host}:${zk-port}${zk-ledgers-root-path}`
+      description: BookKeeper metadata service URI derived from the connected ZooKeeper metadata store.
+  services:
+    bookie:
+      container: bookie
+      port: <- $bookie-port
+      protocol: tcp
+      description: Private BookKeeper bookie protocol endpoint for trusted Monk workloads.
+    http:
+      container: bookie
+      port: <- $http-port
+      protocol: tcp
+      description: Private BookKeeper HTTP admin endpoint for internal operational checks.
+  connections:
+    metadata-store:
+      target: bookkeeper/stack-zookeeper
+      service: client
+  depends:
+    wait-for:
+      runnables:
+        - bookkeeper/stack-zookeeper
+      timeout: 120
+
+stack:
+  defines: process-group
+  metadata:
+    name: Apache BookKeeper Standalone Stack
+    description: |
+      Production-oriented standalone BookKeeper deployment with a private ZooKeeper metadata store and a private persistent BookKeeper bookie. No service is exposed to the internet by default because the BookKeeper admin HTTP surface is unauthenticated.
+    tags: apache, bookkeeper, zookeeper, metadata, standalone, production
+    website: https://bookkeeper.apache.org/
+    source: https://github.com/apache/bookkeeper
+    publisher: monk.io
+    private: false
+  runnable-list:
+    - bookkeeper/stack-zookeeper
+    - bookkeeper/stack-bookie
+
+stack-local-zookeeper:
+  defines: runnable
+  inherits: zookeeper/monk-zookeeper
+  metadata:
+    name: Apache BookKeeper Local Stack ZooKeeper
+    description: |
+      ZooKeeper metadata store for the local standalone verification flavor. It inherits the catalog `zookeeper/monk-zookeeper` package and remains private on the Monk network.
+    tags: apache, bookkeeper, zookeeper, metadata, standalone, local
+    website: https://zookeeper.apache.org/
+    source: https://github.com/apache/zookeeper
+    publisher: monk.io
+    private: false
+  variables:
+    image:
+      type: string
+      value: 3.9.5
+      description: Public zookeeper Docker image tag to run for the local standalone metadata store.
+    admin_server:
+      type: bool
+      value: true
+      env: ZOO_ADMINSERVER_ENABLED
+      description: Enables ZooKeeper's admin server inside the private local workload.
+  services:
+    client:
+      container: db
+      port: 2181
+      protocol: tcp
+      description: Private ZooKeeper client endpoint consumed by the local BookKeeper bookie.
+
+stack-local-bookie:
+  defines: runnable
+  inherits: bookkeeper/base
+  metadata:
+    name: Apache BookKeeper Standalone Local Bookie
+    description: |
+      Local verification flavor of the standalone BookKeeper stack. It keeps the bookie protocol private and publishes only the BookKeeper HTTP health endpoint on a non-privileged host port for external smoke testing.
+    tags: apache, bookkeeper, storage, log-service, standalone, local
+    website: https://bookkeeper.apache.org/
+    source: https://github.com/apache/bookkeeper
+    publisher: monk.io
+    private: false
+  variables:
+    host-http-port:
+      type: int
+      value: 8092
+      description: Non-privileged host port published by the local standalone flavor for the BookKeeper HTTP health endpoint.
+    storage-volume-name:
+      type: string
+      value: bookkeeper-stack-local
+      description: Name of the Monk volume subdirectory used for persistent data in the local standalone flavor.
+    zk-ledgers-root-path:
+      type: string
+      env: BK_zkLedgersRootPath
+      value: /bookkeeper-stack-local-ledgers
+      description: ZooKeeper ledger metadata root path for the local standalone flavor.
+    zk-servers:
+      type: string
+      env: BK_zkServers
+      value: <- connection("metadata-store")
+      description: ZooKeeper host:port list read from the Monk metadata-store connection.
+    metadata-service-uri:
+      type: string
+      env: BK_metadataServiceUri
+      value: <- connection-hostname("metadata-store") set-tmp("zk-host") connection-port("metadata-store") set-tmp("zk-port") `zk+hierarchical://${zk-host}:${zk-port}${zk-ledgers-root-path}`
+      description: BookKeeper metadata service URI derived from the connected ZooKeeper metadata store.
+  services:
+    bookie:
+      container: bookie
+      port: <- $bookie-port
+      protocol: tcp
+      description: Private BookKeeper bookie protocol endpoint for connected Monk workloads.
+    http:
+      container: bookie
+      port: <- $http-port
+      protocol: tcp
+      publish: true
+      host-port: <- $host-http-port
+      description: Published local BookKeeper HTTP admin endpoint used to verify the standalone local flavor.
+  connections:
+    metadata-store:
+      target: bookkeeper/stack-local-zookeeper
+      service: client
+  depends:
+    wait-for:
+      runnables:
+        - bookkeeper/stack-local-zookeeper
+      timeout: 120
+
+stack-local:
+  defines: process-group
+  metadata:
+    name: Apache BookKeeper Standalone Local Stack
+    description: |
+      Local verification flavor of the standalone BookKeeper stack. ZooKeeper and the bookie protocol remain private, while the BookKeeper HTTP health endpoint is published on a non-privileged host port for external verification.
+    tags: apache, bookkeeper, zookeeper, metadata, standalone, local
+    website: https://bookkeeper.apache.org/
+    source: https://github.com/apache/bookkeeper
+    publisher: monk.io
+    private: false
+  runnable-list:
+    - bookkeeper/stack-local-zookeeper
+    - bookkeeper/stack-local-bookie
