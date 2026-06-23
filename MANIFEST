@@ -1,0 +1,5 @@
+LOAD bookkeeper.yaml
+LOAD bookkeeper-example.yaml
+LOAD bookkeeper-stack.yaml
+
+ENTRY bookkeeper/stack-local

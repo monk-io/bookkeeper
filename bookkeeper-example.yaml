@@ -1,0 +1,104 @@
+namespace: bookkeeper
+
+example-zookeeper:
+  defines: runnable
+  inherits: zookeeper/monk-zookeeper
+  metadata:
+    name: Apache BookKeeper Example ZooKeeper
+    description: |
+      ZooKeeper metadata store used by the BookKeeper component example. It inherits the catalog `zookeeper/monk-zookeeper` package and stays private on the Monk network.
+    tags: apache, bookkeeper, zookeeper, metadata, example, local
+    website: https://zookeeper.apache.org/
+    source: https://github.com/apache/zookeeper
+    publisher: monk.io
+    private: false
+  variables:
+    image:
+      type: string
+      value: 3.9.5
+      description: Public zookeeper Docker image tag to run for the example metadata store.
+    admin_server:
+      type: bool
+      value: true
+      env: ZOO_ADMINSERVER_ENABLED
+      description: Enables ZooKeeper's admin server inside the private example workload.
+  services:
+    client:
+      container: db
+      port: 2181
+      protocol: tcp
+      description: Private ZooKeeper client endpoint consumed by the example BookKeeper bookie.
+
+example-bookie:
+  defines: runnable
+  inherits: bookkeeper/base
+  metadata:
+    name: Apache BookKeeper Component Example Bookie
+    description: |
+      Component example bookie that inherits the reusable BookKeeper base and wires it to a concrete ZooKeeper metadata store from the Monk catalog. Its HTTP endpoint is published on a non-privileged local host port for verification.
+    tags: apache, bookkeeper, storage, log-service, example, local
+    website: https://bookkeeper.apache.org/
+    source: https://github.com/apache/bookkeeper
+    publisher: monk.io
+    private: false
+  variables:
+    host-http-port:
+      type: int
+      value: 8091
+      description: Non-privileged host port published by the component example for the BookKeeper HTTP health endpoint.
+    storage-volume-name:
+      type: string
+      value: bookkeeper-example-verified
+      description: Name of the Monk volume subdirectory used for persistent data in the component example.
+    zk-ledgers-root-path:
+      type: string
+      env: BK_zkLedgersRootPath
+      value: /bookkeeper-example-verified-ledgers
+      description: ZooKeeper ledger metadata root path for the component example.
+    zk-servers:
+      type: string
+      env: BK_zkServers
+      value: <- connection("metadata-store")
+      description: ZooKeeper host:port list read from the Monk metadata-store connection.
+    metadata-service-uri:
+      type: string
+      env: BK_metadataServiceUri
+      value: <- connection-hostname("metadata-store") set-tmp("zk-host") connection-port("metadata-store") set-tmp("zk-port") `zk+hierarchical://${zk-host}:${zk-port}${zk-ledgers-root-path}`
+      description: BookKeeper metadata service URI derived from the connected ZooKeeper metadata store.
+  services:
+    bookie:
+      container: bookie
+      port: <- $bookie-port
+      protocol: tcp
+      description: Private BookKeeper bookie protocol endpoint for connected Monk workloads.
+    http:
+      container: bookie
+      port: <- $http-port
+      protocol: tcp
+      publish: true
+      host-port: <- $host-http-port
+      description: Published local BookKeeper HTTP admin endpoint used to verify the component example.
+  connections:
+    metadata-store:
+      target: bookkeeper/example-zookeeper
+      service: client
+  depends:
+    wait-for:
+      runnables:
+        - bookkeeper/example-zookeeper
+      timeout: 120
+
+example:
+  defines: process-group
+  metadata:
+    name: Apache BookKeeper Component Example
+    description: |
+      Component demonstration that composes the reusable BookKeeper bookie with a concrete ZooKeeper metadata store from the Monk catalog and exposes a local HTTP health endpoint.
+    tags: apache, bookkeeper, zookeeper, metadata, example, local
+    website: https://bookkeeper.apache.org/
+    source: https://github.com/apache/bookkeeper
+    publisher: monk.io
+    private: false
+  runnable-list:
+    - bookkeeper/example-zookeeper
+    - bookkeeper/example-bookie
