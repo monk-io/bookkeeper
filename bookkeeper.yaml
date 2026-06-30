@@ -56,20 +56,20 @@ base:
       env: BK_DATA_DIR
       value: /data/bookkeeper
       description: Root directory for BookKeeper journal, ledger, and index data inside the container.
-    storage-volume-name:
-      type: string
-      value: bookkeeper
-      description: Name of the Monk volume subdirectory used for persistent BookKeeper data.
   containers:
     bookie:
       image: apache/bookkeeper
       image-tag: <- $bookkeeper-image-tag
-      paths:
-        - <- `${volume-path}/${storage-volume-name}:/data/bookkeeper`
+      mounted-volumes:
+        bookie-data:
+          path: /data/bookkeeper
       restart: unless-stopped
       bash: |
         export BK_advertisedAddress="$(hostname -I | awk '{print $1}')"
         exec /bin/bash /opt/bookkeeper/scripts/entrypoint.sh bookie
+  volumes:
+    bookie-data:
+      kind: local
   services:
     bookie:
       container: bookie

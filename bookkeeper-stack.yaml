@@ -42,10 +42,6 @@ stack-bookie:
     publisher: monk.io
     private: false
   variables:
-    storage-volume-name:
-      type: string
-      value: bookkeeper-stack
-      description: Name of the Monk volume subdirectory used for persistent data in the standalone stack.
     zk-ledgers-root-path:
       type: string
       env: BK_zkLedgersRootPath
@@ -143,10 +139,6 @@ stack-local-bookie:
       type: int
       value: 8092
       description: Non-privileged host port published by the local standalone flavor for the BookKeeper HTTP health endpoint.
-    storage-volume-name:
-      type: string
-      value: bookkeeper-stack-local
-      description: Name of the Monk volume subdirectory used for persistent data in the local standalone flavor.
     zk-ledgers-root-path:
       type: string
       env: BK_zkLedgersRootPath
