@@ -164,7 +164,6 @@ stack-local-bookie:
       container: bookie
       port: <- $http-port
       protocol: tcp
-      publish: true
       host-port: <- $host-http-port
       description: Published local BookKeeper HTTP admin endpoint used to verify the standalone local flavor.
   connections:
