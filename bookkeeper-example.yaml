@@ -46,10 +46,6 @@ example-bookie:
       type: int
       value: 8091
       description: Non-privileged host port published by the component example for the BookKeeper HTTP health endpoint.
-    storage-volume-name:
-      type: string
-      value: bookkeeper-example-verified
-      description: Name of the Monk volume subdirectory used for persistent data in the component example.
     zk-ledgers-root-path:
       type: string
       env: BK_zkLedgersRootPath
@@ -75,7 +71,6 @@ example-bookie:
       container: bookie
       port: <- $http-port
       protocol: tcp
-      publish: true
       host-port: <- $host-http-port
       description: Published local BookKeeper HTTP admin endpoint used to verify the component example.
   connections:
